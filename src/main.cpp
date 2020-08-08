@@ -36,7 +36,6 @@ const int VOLUME_CLK_PIN = 10;
 
 
 const int BUTTON_DELAY = 10;
-
 volatile int button_on = 0; // 0 = OFF, 1 = ON
 // volatile -  it directs the compiler to load the variable 
 // from RAM and not from a storage register, which is a temporary 
@@ -48,11 +47,12 @@ volatile int button_on = 0; // 0 = OFF, 1 = ON
 // In the Arduino, the only place that this is likely to occur is 
 // in sections of code associated with interrupts, called an interrupt service routine.
 
+int volume_level = 30; // 30-100
+boolean is_radio_off = true;
+
+// The frequency you want to select in MHz multiplied by 100.
+uint16_t frequency = 10610; 
 RDA5807 Raadio;
-
-// M62429 Volume(VOLUME_CLK_PIN, VOLUME_DT_PIN);
-int volume_level = 20; // 0 is max, 83 in minimum volume (-83dB).
-
 
 /**
  * Function to set rotary encoder button status: 0 or 1
@@ -143,7 +143,7 @@ bool checkI2C() {
   }
 }
 
-void setVolume (uint8_t volume)
+void set_volume (uint8_t volume)
 {
 	uint8_t bits;
 	uint16_t data = 0; // control word is built by OR-ing in the bits
@@ -174,6 +174,52 @@ void setVolume (uint8_t volume)
 	//return data; // return bit pattern in case you want it :)
 }
 
+void volume_down(){
+  if (volume_level >= 30) {
+      --volume_level;
+      set_volume(volume_level);
+      DEBUG_PRINT(" Volume: ");
+      DEBUG_PRINTLN(volume_level);
+  }
+}
+
+void volume_up(){
+  if (volume_level <= 100) {
+      ++volume_level;
+      set_volume(volume_level);
+      DEBUG_PRINT(" Volume: ");
+      DEBUG_PRINTLN(volume_level);
+  }
+}
+
+
+void amp_on(){
+  digitalWrite(MUTE_PIN, LOW);
+}
+
+void amp_off(){
+  digitalWrite(MUTE_PIN, HIGH);
+}
+
+void turn_raadio_on(){
+  Raadio.setMute(false);
+  Raadio.setVolume(15);
+  Raadio.setFrequency(frequency); 
+  amp_on();
+  is_radio_off = false;
+
+  DEBUG_PRINT("Current Channel: ");
+  DEBUG_PRINTLN(Raadio.getRealChannel());
+  DEBUG_PRINT("get Frequency.: ");
+  DEBUG_PRINTLN(Raadio.getRealFrequency());
+}
+
+void turn_raadio_off(){
+  Raadio.setMute(true);
+  Raadio.setVolume(0);
+  amp_off();
+  is_radio_off = true;
+}
 
 /*****************************************************/
 
@@ -200,8 +246,7 @@ void setup() {
   pinMode(VOLUME_CLK_PIN, OUTPUT);
   pinMode(VOLUME_DT_PIN, OUTPUT);
 
-  // Activ low
-  digitalWrite(MUTE_PIN, LOW); // amp
+  amp_off();
 
 /*
   if (!checkI2C())
@@ -213,26 +258,9 @@ void setup() {
 
   Raadio.setup();
   Raadio.setMono(true);
-  Raadio.setVolume(15); // 0 - 15  
-  delay(500);
-
-  DEBUG_PRINTLN("set 106.1MHz");
-  Raadio.setFrequency(10610); // The frequency you want to select in MHz multiplied by 100.
+  delay(100);
   
-  DEBUG_PRINT("Current Channel: ");
-  DEBUG_PRINTLN(Raadio.getRealChannel());
-
-  DEBUG_PRINT("get Frequency.: ");
-  DEBUG_PRINTLN(Raadio.getRealFrequency());
-  
-  // Mute
-  //Raadio.setMute(true);
-  //Raadio.setMute(false);
-
-  // Seek
-  //Raadio.seek(0,1);
-  setVolume(volume_level);
-  delay(5);
+  set_volume(volume_level);
 }
 
 void loop() {
@@ -240,32 +268,29 @@ void loop() {
   int rotate = get_encoder_turn();
   // Left turn
   if (rotate > 0) {  
-    DEBUG_PRINT(rotate);
-    DEBUG_PRINTLN(" = Left");
-    if (volume_level > 0) {
-      --volume_level;
-      setVolume(volume_level);
-      delay(5);
-      DEBUG_PRINTLN(volume_level);
-    }
+    DEBUG_PRINT(rotate); DEBUG_PRINT(" Left");
+    DEBUG_PRINT("is radio off: "); DEBUG_PRINTLN(is_radio_off);
+    volume_down();
   }
   // Right turn
   else if (rotate < 0) {
-    DEBUG_PRINT(rotate);
-    DEBUG_PRINTLN(" = Right");
-    if (volume_level < 100) {
-      ++volume_level;
-      setVolume(volume_level);
-      delay(5);
-      DEBUG_PRINTLN(volume_level);
+    DEBUG_PRINT(rotate); DEBUG_PRINT(" Right");
+    DEBUG_PRINT("is radio off: "); DEBUG_PRINTLN(is_radio_off);
+    if (is_radio_off) {
+      turn_raadio_on();
     }
+    volume_up();
   }
+
+  if (volume_level < 31) {
+    turn_raadio_off();
+  }
+  if (volume_level > 30 && is_radio_off)
 
   if (button_on) {
     
   }
   else {
-    //DEBUG_PRINT("Low");
   }
   
 /*
