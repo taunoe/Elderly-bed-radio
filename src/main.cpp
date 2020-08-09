@@ -1,10 +1,11 @@
 /**
  * Tsenter vanakeste voodi raadio ühe nupuga kontrollimine.
  * Tauno Erik
- * 07. august 2020
+ * 09. august 2020
  * 
  **/
 #include <Arduino.h>
+#include <EEPROM.h>
 #include <RDA5807.h>  // https://github.com/pu2clr/RDA5807
 // #include "M62429.h"   // https://github.com/CGrassin/M62429_Arduino_Library
 // Ei saanud tööle:
@@ -26,17 +27,18 @@ const int RE_DT_PIN = 5;
 
 // Output Pin
 const int MUTE_PIN = 4;
+
 // Input Pins
 const int NEXT_BUTTON_PIN = 7;
 const int SAVE_BUTTON_PIN = 8;
+boolean is_next_button = false;
+boolean is_save_button = false;
 
 // FM62429 Volume control
 const int VOLUME_DT_PIN = 9;
 const int VOLUME_CLK_PIN = 10;
 
-
-const int BUTTON_DELAY = 10;
-volatile int button_on = 0; // 0 = OFF, 1 = ON
+volatile int sw_button_on = 0; // 0 = OFF, 1 = ON
 // volatile -  it directs the compiler to load the variable 
 // from RAM and not from a storage register, which is a temporary 
 // memory location where program variables are stored and manipulated. 
@@ -46,26 +48,31 @@ volatile int button_on = 0; // 0 = OFF, 1 = ON
 // section in which it appears, such as a concurrently executing thread. 
 // In the Arduino, the only place that this is likely to occur is 
 // in sections of code associated with interrupts, called an interrupt service routine.
+const int MIN_VOLUME = 30;
+int volume_level = 60; // 30-100
+unsigned long time_prev = 0;
 
-int volume_level = 30; // 30-100
 boolean is_radio_off = true;
 
 // The frequency you want to select in MHz multiplied by 100.
-uint16_t frequency = 10610; 
+//uint16_t frequency = 10610;
+unsigned int channel_address = 0;
+unsigned int channel = EEPROM.read(channel_address);
+unsigned int new_channel = 191;
 RDA5807 Raadio;
 
 /**
  * Function to set rotary encoder button status: 0 or 1
  * Handled by interrupt.
  **/
-void set_button() {
-  if (button_on == 0) {
-    button_on = 1;
-    DEBUG_PRINTLN("Button ON");
+void set_sw_button() {
+  if (sw_button_on == 0) {
+    sw_button_on = 1;
+    DEBUG_PRINTLN("SW Button ON");
   }
   else {
-    button_on = 0;
-    DEBUG_PRINTLN("Button OFF");
+    sw_button_on = 0;
+    DEBUG_PRINTLN("SW Button OFF");
   }
 }
 
@@ -174,24 +181,43 @@ void set_volume (uint8_t volume)
 	//return data; // return bit pattern in case you want it :)
 }
 
-void volume_down(){
+void volume_down(int step = 1){
   if (volume_level >= 30) {
-      --volume_level;
-      set_volume(volume_level);
-      DEBUG_PRINT(" Volume: ");
-      DEBUG_PRINTLN(volume_level);
+    volume_level = volume_level - step;
   }
+  if (volume_level < 30) {
+    volume_level = 30;
+  }
+  set_volume(volume_level);
+  DEBUG_PRINT(" Step: "); DEBUG_PRINT(step);
+  DEBUG_PRINT(" Volume: "); DEBUG_PRINTLN(volume_level);
 }
 
-void volume_up(){
+void volume_up(int step = 1){
   if (volume_level <= 100) {
-      ++volume_level;
-      set_volume(volume_level);
-      DEBUG_PRINT(" Volume: ");
-      DEBUG_PRINTLN(volume_level);
+    volume_level = volume_level + step;
   }
+  if (volume_level > 100) {
+    volume_level = 100;
+  }
+  set_volume(volume_level);
+  DEBUG_PRINT(" Step: "); DEBUG_PRINT(step);
+  DEBUG_PRINT(" Volume: "); DEBUG_PRINTLN(volume_level);
 }
 
+int calculate_step() {
+  int step = 1;
+  unsigned long speed = (millis() - time_prev);
+  time_prev = millis();
+  DEBUG_PRINT(" Speed: "); DEBUG_PRINT(speed);
+  if (speed < 80) {
+      step = 10;
+  }
+  else if (speed < 120) {
+      step = 5;
+  }
+  return step;
+}
 
 void amp_on(){
   digitalWrite(MUTE_PIN, LOW);
@@ -203,20 +229,19 @@ void amp_off(){
 
 void turn_raadio_on(){
   Raadio.setMute(false);
-  Raadio.setVolume(15);
-  Raadio.setFrequency(frequency); 
+  
   amp_on();
   is_radio_off = false;
 
   DEBUG_PRINT("Current Channel: ");
-  DEBUG_PRINTLN(Raadio.getRealChannel());
-  DEBUG_PRINT("get Frequency.: ");
+  DEBUG_PRINT(Raadio.getRealChannel());
+  DEBUG_PRINT(" Frequency.: ");
   DEBUG_PRINTLN(Raadio.getRealFrequency());
 }
 
 void turn_raadio_off(){
   Raadio.setMute(true);
-  Raadio.setVolume(0);
+  //Raadio.setVolume(0);
   amp_off();
   is_radio_off = true;
 }
@@ -236,7 +261,7 @@ void setup() {
   pinMode(RE_CLK_PIN, INPUT);
   pinMode(RE_DT_PIN, INPUT);
   pinMode(RE_SW_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(RE_SW_PIN), set_button, FALLING);
+  attachInterrupt(digitalPinToInterrupt(RE_SW_PIN), set_sw_button, FALLING);
 
   pinMode(NEXT_BUTTON_PIN, INPUT);
   pinMode(SAVE_BUTTON_PIN, INPUT);
@@ -257,41 +282,75 @@ void setup() {
   */
 
   Raadio.setup();
+  delay(10);
   Raadio.setMono(true);
-  delay(100);
-  
-  set_volume(volume_level);
+  Raadio.setChannel(channel);
+  Raadio.setVolume(15);
+  turn_raadio_off();
 }
 
 void loop() {
 
+  /*******************************
+   * Rotary encoder turns
+   *******************************/
   int rotate = get_encoder_turn();
   // Left turn
   if (rotate > 0) {  
-    DEBUG_PRINT(rotate); DEBUG_PRINT(" Left");
-    DEBUG_PRINT("is radio off: "); DEBUG_PRINTLN(is_radio_off);
-    volume_down();
+    DEBUG_PRINT(rotate); DEBUG_PRINT(" Left -");
+    DEBUG_PRINT(" Is radio off: "); DEBUG_PRINT(is_radio_off);
+    volume_down(calculate_step());
   }
   // Right turn
   else if (rotate < 0) {
-    DEBUG_PRINT(rotate); DEBUG_PRINT(" Right");
-    DEBUG_PRINT("is radio off: "); DEBUG_PRINTLN(is_radio_off);
+    DEBUG_PRINT(rotate); DEBUG_PRINT(" Right +");
+    DEBUG_PRINT(" Is radio off: "); DEBUG_PRINT(is_radio_off);
     if (is_radio_off) {
       turn_raadio_on();
     }
-    volume_up();
+    volume_up(calculate_step());
   }
 
-  if (volume_level < 31) {
+  if (volume_level < MIN_VOLUME) {
     turn_raadio_off();
   }
-  if (volume_level > 30 && is_radio_off)
+  
+  /*******************************
+   * Read Buttons
+   *******************************/
+  is_next_button = digitalRead(NEXT_BUTTON_PIN);
+  is_save_button = digitalRead(SAVE_BUTTON_PIN);
 
-  if (button_on) {
-    
+  if (is_next_button) {
+    DEBUG_PRINTLN("Next Button!"); // punane
+    Raadio.seek(0, 1); // continue seek, up
+    delay(150);
+    DEBUG_PRINT("Current Channel: ");
+    DEBUG_PRINT(Raadio.getRealChannel());
+    DEBUG_PRINT(" Frequency.: ");
+    DEBUG_PRINTLN(Raadio.getRealFrequency());
+    new_channel = Raadio.getRealChannel();
+  }
+
+  if (is_save_button) {
+    DEBUG_PRINTLN("Save Button!");
+    EEPROM.update(channel_address, new_channel); // value = 0-255
+    //DEBUG_PRINT("Saved: ");
+    //DEBUG_PRINTLN(new_channel);
+    DEBUG_PRINT( "Read: ");
+    DEBUG_PRINTLN(EEPROM.read(channel_address));
+    delay(150);
+  }
+
+  // If Rotary Encoder sw button is true
+  if (sw_button_on) {
+    //
   }
   else {
+    //
   }
+
+
   
 /*
   if (Serial.available()){
@@ -307,6 +366,4 @@ void loop() {
   }
   */
 
- 
-
-}
+} // End of file
