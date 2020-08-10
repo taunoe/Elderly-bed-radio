@@ -12,6 +12,12 @@ Preset for one channel. The main user can change volume and turn it on/off.
 - Button to search next channel
 - Button to save current channel
 
+### Block diagram
+![Block diagram](./img/Bed-Radio-skeem.png)
+
+![Schematics](img/Elderli-bed-radio-Tauno-Erik.png)
+
+
 ## BOM
 
 | Name                               | Quantity |
