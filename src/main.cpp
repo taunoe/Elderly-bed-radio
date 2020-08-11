@@ -255,7 +255,7 @@ void setup() {
   DEBUG_PRINT(__TIME__);
   DEBUG_PRINT(" ");
   DEBUG_PRINTLN(__DATE__);
-  DEBUG_PRINTLN("by Tauno Erik");
+  DEBUG_PRINTLN("Made by Tauno Erik");
 
   // Input Pins setup
   pinMode(RE_CLK_PIN, INPUT);
@@ -311,7 +311,7 @@ void loop() {
     volume_up(calculate_step());
   }
 
-  if (volume_level < MIN_VOLUME) {
+  if (volume_level < MIN_VOLUME + 1) {
     turn_raadio_off();
   }
   
