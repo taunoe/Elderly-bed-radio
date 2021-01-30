@@ -37,3 +37,7 @@ Preset for one channel. The main user can change volume and turn it on/off.
 | USB cabel, Type A to Mini B (Arduino)   |        1 |
 | PCB ....x....cm                         |          |
 | Wires                                   |          |
+
+___
+
+Copyright 2021 Tauno Erik https://taunoerik.art
