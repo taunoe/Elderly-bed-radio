@@ -17,8 +17,8 @@
 // Digital volume // https://github.com/RobTillaart/M62429
 
 // Enable debug info serial print
+#ifndef DEBUG
 #define DEBUG
-#ifdef DEBUG
   #define DEBUG_PRINT(x)  Serial.print(x)
   #define DEBUG_PRINTLN(x)  Serial.println(x)
 #else
