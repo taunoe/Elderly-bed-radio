@@ -16,8 +16,10 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <RDA5807.h>
+
 #define DEBUG
 #include "tauno_debug.h"
+
 
 // Define Rotary encoder pins
 const int RE_SW_PIN  = 2;

@@ -24,4 +24,6 @@ Preset for one channel. The main user can change volume and turn it on/off.
 
 ![Schematics 1](doc/Sheet_1.png)
 ![Schematics 2](doc/Sheet_2.png)
+___
 
+Copyright 2021 Tauno Erik https://taunoerik.art
