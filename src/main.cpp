@@ -5,26 +5,19 @@
  * Copyright 2021 Tauno Erik
  * https://taunoerik.art
  * 09. august 2020
- * Last edited: 23.01.2021
+ * Last edited: 04.04.2021
  * 
+ * Linke:
+ * https://github.com/pu2clr/RDA5807
+ * https://github.com/CGrassin/M62429_Arduino_Library
+ * https://github.com/RobTillaart/M62429
  **/
 
 #include <Arduino.h>
 #include <EEPROM.h>
-#include <RDA5807.h>  // https://github.com/pu2clr/RDA5807
-// #include "M62429.h"   // https://github.com/CGrassin/M62429_Arduino_Library
-// Ei saanud tööle:
-// Digital volume // https://github.com/RobTillaart/M62429
-
-// Enable debug info serial print
+#include <RDA5807.h>
 #define DEBUG
-#ifdef DEBUG
-  #define DEBUG_PRINT(x)  Serial.print(x)
-  #define DEBUG_PRINTLN(x)  Serial.println(x)
-#else
-  #define DEBUG_PRINT(x)
-  #define DEBUG_PRINTLN(x)
-#endif
+#include "tauno_debug.h"
 
 // Define Rotary encoder pins
 const int RE_SW_PIN  = 2;
@@ -39,15 +32,15 @@ const int NEXT_BUTTON_PIN = 8;
 const int SAVE_BUTTON_PIN = 7;
 
 // Store bottons state
-boolean is_next_button = false;
-boolean is_save_button = false;
+bool is_next_button = false;
+bool is_save_button = false;
 
 // Define FM62429 Volume control pins
 const int VOLUME_DT_PIN = 9;
 const int VOLUME_CLK_PIN = 10;
 
 // Define Rotary Encoder button status
-volatile int sw_button_on = 0; // 0 = OFF, 1 = ON
+volatile bool is_sw_button_on = false;  // 0 = OFF, 1 = ON
 // volatile -  it directs the compiler to load the variable 
 // from RAM and not from a storage register, which is a temporary 
 // memory location where program variables are stored and manipulated. 
@@ -83,11 +76,11 @@ RDA5807 Raadio;
  * Handled by interrupt.
  **/
 void set_sw_button() {
-  if (sw_button_on == 0) {
-    sw_button_on = 1;
+  if (!is_sw_button_on) {
+    is_sw_button_on = true;
     DEBUG_PRINTLN("SW Button ON");
   } else {
-    sw_button_on = 0;
+    is_sw_button_on = false;
     DEBUG_PRINTLN("SW Button OFF");
   }
 }
@@ -137,30 +130,28 @@ bool checkI2C() {
   int nDevices;
   Serial.println("I2C bus Scanning...");
   nDevices = 0;
-  for(address = 1; address < 127; address++ ) {
+  for (address = 1; address < 127; address++) {
     Wire.beginTransmission(address);
     error = Wire.endTransmission();
     if (error == 0) {
       Serial.print("\nI2C device found at address 0x");
-      if (address<16) {
+      if (address < 16) {
         Serial.print("0");
       }
-      Serial.println(address,HEX);
+      Serial.println(address, HEX);
       nDevices++;
-    }
-    else if (error==4) {
+    } else if (error == 4) {
       Serial.print("\nUnknow error at address 0x");
-      if (address<16) {
+      if (address < 16) {
         Serial.print("0");
       }
-      Serial.println(address,HEX);
-    }    
+      Serial.println(address, HEX);
+    }
   }
   if (nDevices == 0) {
     Serial.println("No I2C devices found\n");
     return false;
-  }
-  else {
+  } else {
     Serial.println("done\n");
     return true;
   }
@@ -201,7 +192,8 @@ void set_volume(uint8_t volume) {
   digitalWrite(VOLUME_DT_PIN, 1);  // final clock latches data in
   delayMicroseconds(2);
   digitalWrite(VOLUME_CLK_PIN, 0);
-	//return data; // return bit pattern in case you want it :)
+  // return data;
+  // return bit pattern in case you want it :)
   DEBUG_PRINT("Data: ");
   DEBUG_PRINTLN(data);
 }
@@ -317,14 +309,6 @@ void setup() {
 
   amp_off();
 
-/*
-  if (!checkI2C())
-  {
-      Serial.println("\nCheck your circuit!");
-      while(1);
-  }
-  */
-
   Raadio.setup();
   delay(10);
   Raadio.setMono(true);
@@ -402,15 +386,12 @@ void loop() {
   }
 
   // If Rotary Encoder sw button is true
-  if (sw_button_on) {
+  if (is_sw_button_on) {
     //
-  }
-  else {
+  } else {
     //
   }
 
-
-  
 /*
   if (Serial.available()){
      if (Serial.read() == '0'){
@@ -425,4 +406,4 @@ void loop() {
   }
   */
 
-} // End of file
+}  // End of file
