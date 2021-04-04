@@ -16,6 +16,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <RDA5807.h>
+#include <Tauno_rotary_encoder.h>  // Include Rotary Encoder library
 
 #define DEBUG
 #include "tauno_debug.h"
@@ -25,6 +26,8 @@
 const int RE_SW_PIN  = 2;
 const int RE_CLK_PIN = 6;
 const int RE_DT_PIN  = 5;
+
+Tauno_Rotary_Encoder RE(RE_SW_PIN, RE_CLK_PIN, RE_DT_PIN);
 
 // Define amplifier mute pin
 const int MUTE_PIN = 4;
@@ -89,41 +92,6 @@ void set_sw_button() {
 
 
 /**
- * Function to read rotary encoder turn direction
- * Returns: -1, 0, or 1
- * -1 == Right turn
- *  1 == Left turn
- *  0 == No turn
- **/
-int get_encoder_turn() {
-  /**
-   * The static keyword is used to create variables that are visible to only one function. 
-   * However unlike local variables that get created and destroyed every time a function is called, 
-   * static variables persist beyond the function call, preserving their data between function calls.
-   * Variables declared as static will only be created and initialized the first time a function is called. 
-   **/
-  static int old_a = 1;
-  static int old_b = 1;
-  int result = 0;
-  int new_a = digitalRead(RE_CLK_PIN);
-  int new_b = digitalRead(RE_DT_PIN);
-
-  // If the value of CLK pin or the DT pin has changed
-  if (new_a != old_a || new_b != old_b) {
-    if (old_a == 1 && new_a == 0) {
-      result = (old_b * 2 - 1);
-    }
-  }
-
-  old_a = new_a;
-  old_b = new_b;
-
-  return result;
-}
-
-
-
-/**
  * Returns true if I2C device found
  */
 bool checkI2C() {
@@ -165,10 +133,10 @@ void set_volume(uint8_t volume) {
 
   // convert attenuation to volume
   // remember 0 is full volume!
-  DEBUG_PRINT("\nBefore: ");
+  DEBUG_PRINT("\nset_volume before: ");
   DEBUG_PRINT(volume);
   volume = (volume > 100) ? 0 : (((volume * 83) / -100) + 83);
-  DEBUG_PRINT(" After: ");
+  DEBUG_PRINT(" after: ");
   DEBUG_PRINTLN(volume);
 
   // generate 10 bits of data
@@ -201,6 +169,10 @@ void set_volume(uint8_t volume) {
 }
 
 void volume_down(int step = 1) {
+  if (step == 0) {
+    step = 1;
+  }
+
   if (volume_level >= MIN_VOLUME_LEVEL) {
     volume_level = volume_level - step;
   }
@@ -234,22 +206,6 @@ void volume_up(int step = 1) {
 
   DEBUG_PRINT(" Volume: ");
   DEBUG_PRINTLN(volume_level);
-}
-
-int calculate_step() {
-  int step = 1;
-  unsigned long speed = (millis() - time_prev);
-  time_prev = millis();
-  DEBUG_PRINT(" Speed: ");
-  DEBUG_PRINT(speed);
-
-  if (speed < 80) {
-      step = 10;
-  } else if (speed < 120) {
-      step = 5;
-  }
-
-  return step;
 }
 
 void amp_on() {
@@ -295,10 +251,8 @@ void setup() {
   DEBUG_PRINTLN(__DATE__);
   DEBUG_PRINTLN("Made by Tauno Erik.");
 
-  // Input Pins setup
-  pinMode(RE_CLK_PIN, INPUT);
-  pinMode(RE_DT_PIN, INPUT);
-  pinMode(RE_SW_PIN, INPUT_PULLUP);
+  // Start Rotary Encoder
+  RE.begin();
   attachInterrupt(digitalPinToInterrupt(RE_SW_PIN), set_sw_button, FALLING);
 
   pinMode(NEXT_BUTTON_PIN, INPUT);
@@ -320,16 +274,16 @@ void setup() {
 }
 
 void loop() {
+  // Read Rotary Encoder rotation direction
+  int re_direction = RE.read();
 
-  /*******************************
-   * Rotary encoder turns
-   *******************************/
-  int rotate = get_encoder_turn();
+  // Read Rotary Encoder rotation speed:
+  uint16_t re_speed = RE.speed();
 
   // Rotary Encoder turn to right
-  if (rotate > 0) {
-    DEBUG_PRINT(rotate);
-    DEBUG_PRINT(" Right [+]");
+  if (re_direction == DIR_CW) {
+    DEBUG_PRINT(re_direction);
+    DEBUG_PRINT(" CW [+]");
     DEBUG_PRINT(" Radio is ");
     if (is_radio_off) {
       DEBUG_PRINT("off.");
@@ -340,12 +294,10 @@ void loop() {
     if (is_radio_off) {
       turn_raadio_on();
     }
-    volume_up(calculate_step());
-  }
-  // Rotary Encoder turn to left
-  else if (rotate < 0) {
-    DEBUG_PRINT(rotate);
-    DEBUG_PRINT(" Left [-]");
+    volume_up(re_speed);
+  } else if (re_direction == DIR_CCW) {
+    DEBUG_PRINT(re_direction);
+    DEBUG_PRINT(" CCW [-]");
     DEBUG_PRINT(" Radio is ");
     if (is_radio_off) {
       DEBUG_PRINT("off.");
@@ -353,7 +305,7 @@ void loop() {
       DEBUG_PRINT("on.");
     }
 
-    volume_down(calculate_step());
+    volume_down(re_speed);
   }
 
   if (volume_level < MIN_VOLUME_LEVEL + 1) {
@@ -394,18 +346,4 @@ void loop() {
     //
   }
 
-/*
-  if (Serial.available()){
-     if (Serial.read() == '0'){
-      down();
-      Serial.print("-1");
-     }
-     else {
-      up();
-      Serial.print("+1");
-      
-     }
-  }
-  */
-
-}  // End of file
+}
