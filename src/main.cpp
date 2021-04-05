@@ -5,7 +5,7 @@
  * Copyright 2021 Tauno Erik
  * https://taunoerik.art
  * 09. august 2020
- * Last edited: 04.04.2021
+ * Last edited: 05.04.2021
  * 
  * Linke:
  * https://github.com/pu2clr/RDA5807
@@ -29,6 +29,10 @@ const int RE_DT_PIN  = 5;
 
 Tauno_Rotary_Encoder RE(RE_SW_PIN, RE_CLK_PIN, RE_DT_PIN);
 
+// Define FM62429 Volume control pins
+const int VOLUME_DT_PIN = 9;
+const int VOLUME_CLK_PIN = 10;
+
 // Define amplifier mute pin
 const int MUTE_PIN = 4;
 
@@ -40,21 +44,21 @@ const int SAVE_BUTTON_PIN = 7;
 bool is_next_button = false;
 bool is_save_button = false;
 
-// Define FM62429 Volume control pins
-const int VOLUME_DT_PIN = 9;
-const int VOLUME_CLK_PIN = 10;
+
 
 // Define Rotary Encoder button status
 volatile bool is_sw_button_on = false;  // 0 = OFF, 1 = ON
-// volatile -  it directs the compiler to load the variable 
-// from RAM and not from a storage register, which is a temporary 
-// memory location where program variables are stored and manipulated. 
-// Under certain conditions, the value for a variable stored in registers can be inaccurate.
-// A variable should be declared volatile whenever its value 
-// can be changed by something beyond the control of the code 
-// section in which it appears, such as a concurrently executing thread. 
-// In the Arduino, the only place that this is likely to occur is 
-// in sections of code associated with interrupts, called an interrupt service routine.
+// volatile -  it directs the compiler to load the variable
+// from RAM and not from a storage register, which is a temporary
+// memory location where program variables are stored and manipulated.
+// Under certain conditions, the value for a variable stored
+// in registers can be inaccurate.
+// A variable should be declared volatile whenever its value
+// can be changed by something beyond the control of the code
+// section in which it appears, such as a concurrently executing thread.
+// In the Arduino, the only place that this is likely to occur is
+// in sections of code associated with interrupts,
+// called an interrupt service routine.
 
 // Define volume levels
 const int MIN_VOLUME_LEVEL = 30;  // If lower -> OFF
@@ -64,7 +68,7 @@ int volume_level = 40;  // Default value
 unsigned long time_prev = 0;
 
 // Define Radio status
-boolean is_radio_off = true;
+bool is_radio_off = true;
 
 // The frequency you want to select in MHz multiplied by 100.
 // uint16_t frequency = 10610;
