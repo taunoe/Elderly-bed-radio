@@ -34,6 +34,7 @@ class Tauno_M62429 {
   ~Tauno_M62429();
 
   void begin();
+  void set(uint8_t volume);
   void write_volume(uint8_t volume);
 };
 

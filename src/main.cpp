@@ -5,7 +5,7 @@
  * Copyright 2021 Tauno Erik
  * https://taunoerik.art
  * 09. august 2020
- * Last edited: 05.04.2021
+ * Last edited: 06.04.2021
  * 
  * Linke:
  * https://github.com/pu2clr/RDA5807
@@ -17,7 +17,7 @@
 #include <EEPROM.h>
 #include <RDA5807.h>
 #include <Tauno_rotary_encoder.h>  // Include Rotary Encoder library
-
+#include "Tauno_M62429.h"          // FM62429
 #define DEBUG
 #include "tauno_debug.h"
 
@@ -32,6 +32,8 @@ Tauno_Rotary_Encoder RE(RE_SW_PIN, RE_CLK_PIN, RE_DT_PIN);
 // Define FM62429 Volume control pins
 const int VOLUME_DT_PIN = 9;
 const int VOLUME_CLK_PIN = 10;
+
+Tauno_M62429 Volume(VOLUME_DT_PIN, VOLUME_CLK_PIN);
 
 // Define amplifier mute pin
 const int MUTE_PIN = 4;
@@ -65,7 +67,7 @@ const int MIN_VOLUME_LEVEL = 30;  // If lower -> OFF
 const int MAX_VOLUME_LEVEL = 100;
 int volume_level = 40;  // Default value
 
-unsigned long time_prev = 0;
+uint32_t time_prev = 0;
 
 // Define Radio status
 bool is_radio_off = true;
@@ -94,84 +96,6 @@ void set_sw_button() {
   }
 }
 
-
-/**
- * Returns true if I2C device found
- */
-bool checkI2C() {
-  Wire.begin();
-  byte error, address;
-  int nDevices;
-  Serial.println("I2C bus Scanning...");
-  nDevices = 0;
-  for (address = 1; address < 127; address++) {
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
-    if (error == 0) {
-      Serial.print("\nI2C device found at address 0x");
-      if (address < 16) {
-        Serial.print("0");
-      }
-      Serial.println(address, HEX);
-      nDevices++;
-    } else if (error == 4) {
-      Serial.print("\nUnknow error at address 0x");
-      if (address < 16) {
-        Serial.print("0");
-      }
-      Serial.println(address, HEX);
-    }
-  }
-  if (nDevices == 0) {
-    Serial.println("No I2C devices found\n");
-    return false;
-  } else {
-    Serial.println("done\n");
-    return true;
-  }
-}
-
-void set_volume(uint8_t volume) {
-  uint8_t bits;
-  uint16_t data = 0;  // control word is built by OR-ing in the bits
-
-  // convert attenuation to volume
-  // remember 0 is full volume!
-  DEBUG_PRINT("\nset_volume before: ");
-  DEBUG_PRINT(volume);
-  volume = (volume > 100) ? 0 : (((volume * 83) / -100) + 83);
-  DEBUG_PRINT(" after: ");
-  DEBUG_PRINTLN(volume);
-
-  // generate 10 bits of data
-  data |= (0 << 0);  // D0 (channel select: 0=ch1, 1=ch2)
-  data |= (0 << 1);  // D1 (individual/both select: 0=both, 1=individual)
-  data |= ((21 - (volume / 4)) << 2);
-  // D2...D6 (ATT1: coarse attenuator: 0,-4dB,-8dB, etc.. steps of 4dB)
-  data |= ((3 - (volume % 4)) << 7);
-  // D7...D8 (ATT2: fine attenuator: 0...-1dB... steps of 1dB)
-  data |= (0b11 << 9);  // D9...D10 // D9 & D10 must both be 1
-
-  for (bits = 0; bits < 11; bits++) {  // send out 11 control bits
-    delayMicroseconds(2);  // pg.4 - M62429P/FP datasheet
-    digitalWrite(VOLUME_DT_PIN, 0);
-    delayMicroseconds(2);
-    digitalWrite(VOLUME_CLK_PIN, 0);
-    delayMicroseconds(2);
-    digitalWrite(VOLUME_DT_PIN, (data >> bits) & 0x01);
-    delayMicroseconds(2);
-    digitalWrite(VOLUME_CLK_PIN, 1);
-  }
-  delayMicroseconds(2);
-  digitalWrite(VOLUME_DT_PIN, 1);  // final clock latches data in
-  delayMicroseconds(2);
-  digitalWrite(VOLUME_CLK_PIN, 0);
-  // return data;
-  // return bit pattern in case you want it :)
-  DEBUG_PRINT("Data: ");
-  DEBUG_PRINTLN(data);
-}
-
 void volume_down(int step = 1) {
   if (step == 0) {
     step = 1;
@@ -185,7 +109,7 @@ void volume_down(int step = 1) {
     volume_level = MIN_VOLUME_LEVEL;
   }
 
-  set_volume(volume_level);
+  Volume.set(volume_level);
 
   DEBUG_PRINT(" Step: ");
   DEBUG_PRINT(step);
@@ -195,6 +119,10 @@ void volume_down(int step = 1) {
 }
 
 void volume_up(int step = 1) {
+  if (step == 0) {
+    step = 1;
+  }
+
   if (volume_level <= MAX_VOLUME_LEVEL) {
     volume_level = volume_level + step;
   }
@@ -203,7 +131,7 @@ void volume_up(int step = 1) {
     volume_level = MAX_VOLUME_LEVEL;
   }
 
-  set_volume(volume_level);
+  Volume.set(volume_level);
 
   DEBUG_PRINT(" Step: ");
   DEBUG_PRINT(step);
@@ -264,8 +192,8 @@ void setup() {
 
   // Output Pins setup
   pinMode(MUTE_PIN, OUTPUT);
-  pinMode(VOLUME_CLK_PIN, OUTPUT);
-  pinMode(VOLUME_DT_PIN, OUTPUT);
+
+  Volume.begin();
 
   amp_off();
 
@@ -286,7 +214,6 @@ void loop() {
 
   // Rotary Encoder turn to right
   if (re_direction == DIR_CW) {
-    DEBUG_PRINT(re_direction);
     DEBUG_PRINT(" CW [+]");
     DEBUG_PRINT(" Radio is ");
     if (is_radio_off) {
@@ -300,7 +227,6 @@ void loop() {
     }
     volume_up(re_speed);
   } else if (re_direction == DIR_CCW) {
-    DEBUG_PRINT(re_direction);
     DEBUG_PRINT(" CCW [-]");
     DEBUG_PRINT(" Radio is ");
     if (is_radio_off) {
@@ -349,5 +275,4 @@ void loop() {
   } else {
     //
   }
-
 }

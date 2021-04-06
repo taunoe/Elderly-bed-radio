@@ -31,8 +31,17 @@ void Tauno_M62429::begin() {
   pinMode(_CLK_PIN, OUTPUT);
 }
 
+void Tauno_M62429::set(uint8_t volume) {
+  write_volume(volume);
+}
+
 void Tauno_M62429::write_volume(uint8_t volume) {
   uint16_t data = 0;  // control word is built by OR-ing in the bits
+  uint8_t bits;
+
+  // Convert attenuation to volume
+  // 0 is full volume!
+  volume = (volume > 100) ? 0 : (((volume * 83) / -100) + 83);
 
   // generate 10 bits of data
   data |= (0 << 0);  // D0 (channel select: 0=ch1, 1=ch2)
@@ -44,7 +53,7 @@ void Tauno_M62429::write_volume(uint8_t volume) {
   // D7...D8 (ATT2: fine attenuator: 0...-1dB... steps of 1dB)
   data |= (0b11 << 9);  // D9...D10 // D9 & D10 must both be 1
 
-  for (uint8_t bits = 0; bits < 11; bits++) {  // send out 11 control bits
+  for (bits = 0; bits < 11; bits++) {  // send out 11 control bits
     delayMicroseconds(2);  // pg.4 - M62429P/FP datasheet
     digitalWrite(_DT_PIN, 0);
     delayMicroseconds(2);
